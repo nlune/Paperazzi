@@ -1,16 +1,34 @@
 import json
+import logging
 import os
 import re
 from functools import lru_cache
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
+logger = logging.getLogger(__name__)
+
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from pypdf import PdfReader, PdfWriter
+from fastapi.middleware.cors import CORSMiddleware
 from google import genai
 
 app = FastAPI(title="Paperazzi Backend")
 
-MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+GEMINI_PAGE_LIMIT = 1000
 PROMPT = """
 Analyze the attached PDF and identify the top 5 concepts.
 
@@ -24,6 +42,19 @@ Return only a JSON object with exactly 5 key/value pairs.
 @lru_cache(maxsize=1)
 def get_genai_client() -> genai.Client:
     return genai.Client()
+
+
+def _truncate_pdf_if_needed(src_path: str) -> str:
+    """Return src_path unchanged, or write a truncated copy and return its path."""
+    reader = PdfReader(src_path)
+    if len(reader.pages) <= GEMINI_PAGE_LIMIT:
+        return src_path
+    writer = PdfWriter()
+    for page in reader.pages[:GEMINI_PAGE_LIMIT]:
+        writer.add_page(page)
+    with NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        writer.write(tmp)
+        return tmp.name
 
 
 def _is_pdf(upload: UploadFile) -> bool:
@@ -81,12 +112,15 @@ async def extract_concepts(file: UploadFile = File(...)) -> dict[str, str]:
         raise HTTPException(status_code=400, detail="Uploaded PDF is empty.")
 
     temp_path: str | None = None
+    upload_path: str | None = None
     try:
         with NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
             temp_file.write(file_bytes)
             temp_path = temp_file.name
 
-        uploaded_pdf = get_genai_client().files.upload(file=temp_path)
+        upload_path = _truncate_pdf_if_needed(temp_path)
+
+        uploaded_pdf = get_genai_client().files.upload(file=upload_path)
         response = get_genai_client().models.generate_content(
             model=MODEL_NAME,
             contents=[uploaded_pdf, PROMPT],
@@ -106,6 +140,7 @@ async def extract_concepts(file: UploadFile = File(...)) -> dict[str, str]:
     except HTTPException:
         raise
     except Exception as exc:
+        logger.error(f"Unexpected error: {str(exc)}", exc_info=True)
         raise HTTPException(
             status_code=502,
             detail=f"Failed to extract concepts from Gemini: {exc}",
@@ -114,3 +149,5 @@ async def extract_concepts(file: UploadFile = File(...)) -> dict[str, str]:
         await file.close()
         if temp_path:
             Path(temp_path).unlink(missing_ok=True)
+        if upload_path and upload_path != temp_path:
+            Path(upload_path).unlink(missing_ok=True)

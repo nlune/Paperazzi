@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "@/styles.css";
+import { Toaster } from "sonner";
 
 export const metadata: Metadata = {
   title: "Paperazzi — Turn papers into videos",
@@ -29,6 +30,7 @@ export default function RootLayout({
         <div className="min-h-screen" style={{ background: "var(--gradient-warm)" }}>
           {children}
         </div>
+        <Toaster position="top-center" richColors />
       </body>
     </html>
   );

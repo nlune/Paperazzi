@@ -6,24 +6,59 @@ import { PaperazziLogo } from "@/components/PaperazziLogo";
 import { StepIndicator } from "@/components/StepIndicator";
 import { Sticker } from "@/components/Sticker";
 import { usePaperazziStore } from "@/lib/paperazzi-store";
+import { toast } from "sonner";
 
 export default function UploadPage() {
   const router = useRouter();
-  const setFile = usePaperazziStore((s) => s.setFile);
+  const { setFile, setConcepts, setLoading, isLoading } = usePaperazziStore();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
-  const [busy, setBusy] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
 
   const handleFile = useCallback(
-    (file: File) => {
-      if (!file.name.toLowerCase().endsWith(".pdf")) return;
+    async (file: File) => {
+      if (!file.name.toLowerCase().endsWith(".pdf")) {
+        toast.error("Please upload a PDF file");
+        return;
+      }
+
       setFileName(file.name);
-      setBusy(true);
+      setLoading(true);
       setFile(file.name);
-      setTimeout(() => router.push("/claims"), 900);
+
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const response = await fetch("http://localhost:8000/concepts", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to extract concepts");
+        }
+
+        const data = await response.json();
+
+        // Transform backend dict { "Title": "Summary" } to Concept[]
+        const concepts = Object.entries(data).map(([title, summary], index) => ({
+          id: `c${index}`,
+          title,
+          summary: summary as string,
+          section: "Core Concept",
+          confidence: 0.95 - index * 0.05,
+        }));
+
+        setConcepts(concepts);
+        router.push("/concepts");
+      } catch (error) {
+        console.error("Upload error:", error);
+        toast.error("Failed to process PDF. Is the backend running?");
+        setLoading(false);
+      }
     },
-    [router, setFile],
+    [router, setFile, setConcepts, setLoading],
   );
 
   return (
@@ -76,21 +111,22 @@ export default function UploadPage() {
         <div
           onDragOver={(e) => {
             e.preventDefault();
-            setDragOver(true);
+            if (!isLoading) setDragOver(true);
           }}
           onDragLeave={() => setDragOver(false)}
           onDrop={(e) => {
             e.preventDefault();
             setDragOver(false);
+            if (isLoading) return;
             const f = e.dataTransfer.files?.[0];
             if (f) handleFile(f);
           }}
-          onClick={() => inputRef.current?.click()}
+          onClick={() => !isLoading && inputRef.current?.click()}
           className={`group mt-12 w-full cursor-pointer rounded-3xl border-2 border-dashed p-12 text-center transition-all ${
             dragOver
               ? "scale-[1.01] border-[var(--sunset)] bg-card"
               : "border-border bg-card/60 hover:border-[var(--amber)] hover:bg-card"
-          }`}
+          } ${isLoading ? "opacity-70 cursor-wait" : ""}`}
           style={{ boxShadow: dragOver ? "var(--shadow-glow)" : "var(--shadow-card)" }}
         >
           <input
@@ -104,7 +140,7 @@ export default function UploadPage() {
             }}
           />
           <div
-            className={`mx-auto flex h-16 w-16 items-center justify-center rounded-2xl transition-transform group-hover:scale-110 group-hover:rotate-6 ${busy ? "" : "float"}`}
+            className={`mx-auto flex h-16 w-16 items-center justify-center rounded-2xl transition-transform group-hover:scale-110 group-hover:rotate-6 ${isLoading ? "" : "float"}`}
             style={{ background: "var(--gradient-sunset)" }}
           >
             <svg className="h-8 w-8 text-background" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2}>
@@ -112,13 +148,13 @@ export default function UploadPage() {
             </svg>
           </div>
           <p className="mt-5 text-lg font-medium">
-            {busy ? "Reading paper…" : fileName ?? (dragOver ? "Yes! Drop it 🎯" : "Drop your PDF here")}
+            {isLoading ? "Reading paper…" : fileName ?? (dragOver ? "Yes! Drop it 🎯" : "Drop your PDF here")}
           </p>
           <p className="mt-2 text-sm text-muted-foreground">
-            {busy ? "Extracting the spicy bits" : "or click to browse — PDF up to 50 MB"}
+            {isLoading ? "Extracting the spicy bits" : "or click to browse — PDF up to 50 MB"}
           </p>
 
-          {busy && (
+          {isLoading && (
             <div className="mx-auto mt-6 h-1 w-48 overflow-hidden rounded-full bg-secondary">
               <div
                 className="h-full w-1/3 animate-[slide_1.2s_ease-in-out_infinite]"

@@ -12,7 +12,7 @@ import { STAGES } from "@/lib/constants";
 
 export default function VideoPage() {
   const router = useRouter();
-  const claim = usePaperazziStore((s) => s.getSelectedClaim());
+  const concept = usePaperazziStore((s) => s.getSelectedConcept());
   const [progress, setProgress] = useState(0);
   const [stage, setStage] = useState(0);
   const [ready, setReady] = useState(false);
@@ -20,10 +20,10 @@ export default function VideoPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
-    if (!claim) {
+    if (!concept) {
       router.push("/");
     }
-  }, [claim, router]);
+  }, [concept, router]);
 
   useEffect(() => {
     if (ready) return;
@@ -58,10 +58,10 @@ export default function VideoPage() {
 
         <div className="mt-10 text-center">
           <p className="text-xs uppercase tracking-[0.2em] text-[var(--teal)]">
-            {claim?.section ?? "Your video"}
+            {concept?.section ?? "Your video"}
           </p>
           <h1 className="mt-3 text-balance text-4xl font-semibold tracking-tight md:text-5xl">
-            {claim?.title ?? "Your video"}
+            {concept?.title ?? "Your video"}
           </h1>
         </div>
 
@@ -119,7 +119,7 @@ export default function VideoPage() {
               <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between bg-gradient-to-t from-black/80 to-transparent p-5">
                 <div>
                   <p className="text-xs uppercase tracking-wider text-white/60">Now playing</p>
-                  <p className="mt-0.5 text-sm font-medium text-white">{claim?.title}</p>
+                  <p className="mt-0.5 text-sm font-medium text-white">{concept?.title}</p>
                 </div>
                 <span className="rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-medium text-white backdrop-blur-md">
                   1080p
@@ -148,10 +148,10 @@ export default function VideoPage() {
             Share link
           </button>
           <Link
-            href="/claims"
+            href="/concepts"
             className="rounded-xl px-5 py-3 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
-            ← Pick another claim
+            ← Pick another concept
           </Link>
         </div>
       </main>

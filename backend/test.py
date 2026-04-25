@@ -1,50 +1,33 @@
-import argparse
 import json
 from pathlib import Path
 
 import httpx
 
+# Local URL for testing
+URL = "http://localhost:8000/concepts"
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Upload a PDF to the Paperazzi backend and print the concepts."
-    )
-    parser.add_argument("pdf_path", help="Path to the PDF file to upload.")
-    parser.add_argument(
-        "--url",
-        default="http://127.0.0.1:8000/concepts",
-        help="FastAPI endpoint URL.",
-    )
-    return parser.parse_args()
-
-
-def main() -> None:
-    args = parse_args()
-    pdf_path = Path(args.pdf_path).expanduser().resolve()
-
-    if not pdf_path.exists() or not pdf_path.is_file():
-        raise SystemExit(f"PDF path does not exist or is not a file: {pdf_path}")
-
-    if pdf_path.suffix.lower() != ".pdf":
-        raise SystemExit(f"File must have a .pdf extension: {pdf_path}")
-
-    with pdf_path.open("rb") as pdf_file:
-        response = httpx.post(
-            args.url,
-            files={"file": (pdf_path.name, pdf_file, "application/pdf")},
-            timeout=120,
-        )
-
-    print(f"Status: {response.status_code}")
-
-    try:
-        payload = response.json()
-    except json.JSONDecodeError:
-        print(response.text)
+def test_extract_concepts(pdf_path: str):
+    path = Path(pdf_path)
+    if not path.exists():
+        print(f"File not found: {pdf_path}")
         return
 
-    print(json.dumps(payload, indent=2, ensure_ascii=True))
+    print(f"Uploading {pdf_path} to {URL}...")
+    
+    with open(path, "rb") as f:
+        files = {"file": (path.name, f, "application/pdf")}
+        response = httpx.post(URL, files=files, timeout=60.0)
 
+    if response.status_code == 200:
+        print("Success! Concepts extracted:")
+        print(json.dumps(response.json(), indent=2))
+    else:
+        print(f"Failed with status {response.status_code}")
+        print(response.text)
 
 if __name__ == "__main__":
-    main()
+    import sys
+    if len(sys.argv) < 2:
+        print("Usage: python test.py <path_to_pdf>")
+    else:
+        test_extract_concepts(sys.argv[1])

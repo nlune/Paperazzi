@@ -1,12 +1,13 @@
-export type Claim = {
+export type Concept = {
   id: string;
   title: string;
   summary: string;
   section: string;
   confidence: number; // 0-1
+  imageUrl?: string;
 };
 
-export const SAMPLE_CLAIMS: Claim[] = [
+export const SAMPLE_CONCEPTS: Concept[] = [
   {
     id: "c1",
     title: "Sparse attention scales sub-quadratically",
