@@ -86,6 +86,14 @@ PRESENTATION_SKIP_PATTERNS = (
     "permission to reproduce",
 )
 
+PERSON_NAME_PATTERN = re.compile(r"^[A-Z][a-z]+(?:[-'][A-Z]?[a-z]+)?$")
+CITATION_CONTEXT_PATTERN = re.compile(
+    r"\b(?:et\s+al\.?|al\.?|cf\.|vs\.|cited|citation)\b|"
+    r"\[[0-9,\-\s]+\]|"
+    r"\([^)]*(?:19|20)\d{2}[a-z]?[^)]*\)",
+    re.IGNORECASE,
+)
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -165,6 +173,12 @@ def _presentation_prefilter_reason(section: Any) -> str | None:
     return None
 
 
+def _looks_like_citation_name(word_text: str, surrounding_text: str) -> bool:
+    if not PERSON_NAME_PATTERN.fullmatch(word_text.strip()):
+        return False
+    return CITATION_CONTEXT_PATTERN.search(surrounding_text) is not None
+
+
 def _candidate_rows(
     section: Any,
     word_index: list[Any],
@@ -178,13 +192,16 @@ def _candidate_rows(
     grouped: dict[str, list[Any]] = {}
 
     for index, ref in enumerate(refs):
+        before = " ".join(item.text for item in refs[max(0, index - 5) : index])
+        after = " ".join(item.text for item in refs[index + 1 : index + 6])
+        surrounding_text = f"{before} {ref.text} {after}".strip()
+        if _looks_like_citation_name(ref.text, surrounding_text):
+            continue
         normalized = normalize_token(ref.text)
         if len(normalized) < 3 or normalized.isdigit() or normalized in STOPWORDS:
             continue
         occurrences_by_word[normalized] = occurrences_by_word.get(normalized, 0) + 1
         occurrence = occurrences_by_word[normalized]
-        before = " ".join(item.text for item in refs[max(0, index - 5) : index])
-        after = " ".join(item.text for item in refs[index + 1 : index + 6])
         row = {
             "word": normalized,
             "pdf_occurrence": occurrence,
@@ -242,24 +259,45 @@ def _call_gemini(
         },
     }
     prompt = f"""
-You are testing a PDF-to-Revideo analysis workflow.
+You are planning one short, high-signal explainer beat for a research paper page.
 
 Return exactly one JSON object and no markdown.
 
 Task:
-- Decide whether this Docling section should be processed for an engaging teaching presentation.
+- Decide whether this Docling section materially helps a viewer understand the paper faster.
 - If yes, write concise narration text for this section.
 - Select up to {max_highlights} exact highlight word instances using only pdf_word and pdf_occurrence from the candidate table.
 - Pick the animation primitive/action for each highlight.
 - For each action, identify the narration word and occurrence in narration_text that should trigger that highlight.
+
+Teaching goal:
+- Help the viewer build a better mental model of the paper, not just notice text on the page.
+- Prioritize concepts, mechanisms, causal relationships, architecture components, result takeaways, and figure walkthroughs.
+- Explain what matters, why it matters, and how the visual supports the explanation.
+- Narration should sound like a sharp teacher, not like OCR, metadata, or a citation list.
+
+Engagement rules:
+- Prefer 2 to 4 short sentences.
+- Keep each sentence easy for TTS: roughly 4 to 12 words.
+- Keep the whole narration under 65 words.
+- Use concrete, vivid language that teaches quickly.
+
+Hard exclusions:
+- Do not focus on author names, affiliations, citations, years, reference callouts, section numbering, footnotes, legal boilerplate, or publication metadata unless they are the actual subject being explained.
+- Do not highlight random names or attribution words from related-work citations.
+- Do not waste highlights on generic glue words, weak adjectives, or formatting artifacts.
+- If section_items include a picture item and the section is explaining a diagram or figure, prefer figure-relevant words with primitive figure_callout.
+
+Selection rules:
+- Each highlight should anchor a real teaching moment in the narration.
+- Prefer words that point to the core object being explained: model parts, operations, inputs/outputs, claims, metrics, or figure regions.
+- Pick only the few highlights that make the explanation easier to follow.
 
 Important duplicate rule:
 - The same word can appear multiple times in the PDF and in narration_text.
 - Use pdf_word plus pdf_occurrence to identify the exact PDF word instance.
 - Use narration_word plus narration_occurrence to identify the exact narration word instance.
 - If the narration uses a different word than the PDF source word, still provide the exact narration word and occurrence.
-- If section_items include a picture item and the section is explaining a diagram or figure, prefer figure-relevant words with primitive figure_callout.
-- Be selective. Skip legal notices, usage policies, permissions, copyright text, publication metadata, and other non-teaching boilerplate.
 
 Required JSON shape:
 {{
@@ -292,6 +330,7 @@ Validation:
 - actions must have the same pdf_word and pdf_occurrence order as highlight_instances.
 - primitive must be one of: {", ".join(ALLOWED_PRIMITIVES)}
 - narration_word must appear in narration_text at least narration_occurrence times.
+- decision_reason should mention the teaching value or the reason the section is not worth viewer attention.
 
 SECTION_PACKET:
 {json.dumps(section_packet, ensure_ascii=True, indent=2)}

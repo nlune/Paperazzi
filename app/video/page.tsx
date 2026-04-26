@@ -31,6 +31,10 @@ const RUNNING_STAGES = new Set([
   "rendering_video",
 ]);
 
+function isPageGenerating(page: ProjectPage | null): boolean {
+  return page?.video?.status === "queued" || page?.video?.status === "generating";
+}
+
 function statusLabel(page: ProjectPage | null): string {
   if (!page?.video) {
     return "Ready to generate";
@@ -108,26 +112,35 @@ export default function VideoWorkspacePage() {
   );
 
   const runningJob = Boolean(project && RUNNING_STAGES.has(project.current_stage));
+  const anyPageGenerating = Boolean(project?.pages.some((page) => isPageGenerating(page)));
+  const selectedPageGenerating = isPageGenerating(selectedPage);
   const selectedVideoUrl = assetUrl(selectedPage?.video?.video_url);
   const selectedThumbnailUrl = assetUrl(
     selectedPage?.video?.thumbnail_url ?? selectedPage?.image_url,
   );
 
-  const handleSelectPage = async (page: ProjectPage) => {
+  const handleSelectPage = (page: ProjectPage) => {
     setSelectedPageNumber(page.page);
-    if (!projectId) {
+  };
+
+  const handleGenerateSelectedPage = async () => {
+    if (!projectId || !selectedPage) {
       return;
     }
-    if (page.video?.status === "ready" || page.video?.status === "generating" || page.video?.status === "queued") {
+    if (
+      selectedPage.video?.status === "ready" ||
+      selectedPage.video?.status === "generating" ||
+      selectedPage.video?.status === "queued"
+    ) {
       return;
     }
-    if (runningJob || isTriggering) {
+    if (anyPageGenerating || isTriggering) {
       return;
     }
 
     try {
       setIsTriggering(true);
-      const nextProject = await generatePageVideo(projectId, page.page, {});
+      const nextProject = await generatePageVideo(projectId, selectedPage.page, {});
       setProject(nextProject);
     } catch (error) {
       console.error(error);
@@ -135,6 +148,41 @@ export default function VideoWorkspacePage() {
     } finally {
       setIsTriggering(false);
     }
+  };
+
+  const generateButtonLabel = (() => {
+    if (!selectedPage) {
+      return "Select a page";
+    }
+    if (selectedPageGenerating || isTriggering) {
+      return "Generating";
+    }
+    if (selectedPage.video?.status === "ready") {
+      return "Watch video";
+    }
+    if (anyPageGenerating) {
+      return "Another page is generating";
+    }
+    if (selectedPage.video?.status === "failed") {
+      return "Regenerate video";
+    }
+    return "Generate video";
+  })();
+
+  const canGenerateSelectedPage = Boolean(
+    selectedPage &&
+      selectedPage.video?.status !== "ready" &&
+      !selectedPageGenerating &&
+      !anyPageGenerating &&
+      !isTriggering,
+  );
+
+  const handlePrimaryAction = async () => {
+    if (selectedPage?.video?.status === "ready") {
+      setPlayerOpen(true);
+      return;
+    }
+    await handleGenerateSelectedPage();
   };
 
   return (
@@ -195,13 +243,12 @@ export default function VideoWorkspacePage() {
                   <button
                     key={page.page}
                     type="button"
-                    onClick={() => void handleSelectPage(page)}
-                    disabled={runningJob && selectedPageNumber !== page.page}
+                    onClick={() => handleSelectPage(page)}
                     className={`w-full rounded-2xl border p-2 text-left transition-all ${
                       active
                         ? "border-[var(--sunset)] bg-background shadow-[0_0_0_1px_color-mix(in_oklab,var(--sunset)_45%,transparent)]"
                         : "border-border bg-background/55 hover:border-[var(--amber)]"
-                    } disabled:cursor-not-allowed disabled:opacity-60`}
+                    }`}
                   >
                     <div className="relative overflow-hidden rounded-xl border border-border bg-secondary">
                       <div className="relative aspect-[3/4]">
@@ -249,16 +296,17 @@ export default function VideoWorkspacePage() {
                 {selectedPage ? `Page ${selectedPage.page}` : "Select a page"}
               </h1>
               <p className="mt-3 max-w-2xl text-sm text-muted-foreground md:text-base">
-                Click a page thumbnail to generate a focused explainer. The backend will plan the page, synthesize narration, and render the final MP4.
+                Select any page to inspect it. Generate a focused explainer when you want, and keep browsing finished renders while another page is processing.
               </p>
             </div>
-            {selectedPage && selectedPage.video?.status === "ready" && (
+            {selectedPage && (
               <button
                 type="button"
-                onClick={() => setPlayerOpen(true)}
-                className="rounded-full border border-border bg-background px-4 py-2 text-sm font-semibold transition-colors hover:bg-secondary"
+                onClick={() => void handlePrimaryAction()}
+                disabled={!canGenerateSelectedPage && selectedPage?.video?.status !== "ready"}
+                className="rounded-full border border-border bg-background px-4 py-2 text-sm font-semibold transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Watch video
+                {generateButtonLabel}
               </button>
             )}
           </div>
@@ -289,7 +337,7 @@ export default function VideoWorkspacePage() {
                     </button>
                   ) : (
                     <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-8 text-center text-white">
-                      {(runningJob || isTriggering) && selectedPageNumber === selectedPage.page ? (
+                      {selectedPageGenerating ? (
                         <>
                           <LoaderCircle className="h-10 w-10 animate-spin" />
                           <p className="text-lg font-semibold">{project?.stage_label ?? "Generating video"}</p>
@@ -297,10 +345,18 @@ export default function VideoWorkspacePage() {
                             We are building the workflow, synthesizing audio, and rendering the final video now.
                           </p>
                         </>
+                      ) : anyPageGenerating ? (
+                        <>
+                          <Sparkles className="h-10 w-10" />
+                          <p className="text-lg font-semibold">Another page is generating right now</p>
+                          <p className="max-w-md text-sm text-white/70">
+                            You can keep browsing completed renders while that job finishes.
+                          </p>
+                        </>
                       ) : (
                         <>
                           <Sparkles className="h-10 w-10" />
-                          <p className="text-lg font-semibold">Click this page on the left to generate its video</p>
+                          <p className="text-lg font-semibold">Select this page, then generate its video</p>
                         </>
                       )}
                     </div>

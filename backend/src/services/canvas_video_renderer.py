@@ -275,7 +275,7 @@ def _draw_title_and_caption(
     width, height = image.size
     try:
         title_font = ImageFont.truetype("DejaVuSans-Bold.ttf", max(16, int(height * 0.018)))
-        caption_font = ImageFont.truetype("DejaVuSans.ttf", max(42, int(height * 0.06)))
+        caption_font = ImageFont.truetype("DejaVuSans.ttf", max(42, int(height * 0.1)))
     except OSError:
         title_font = ImageFont.load_default()
         caption_font = ImageFont.load_default()
