@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 Stage = Literal[
     "created",
     "extracting_document",
+    "pages_ready",
     "planning_sections",
     "analysis_ready",
     "generating_voice",
@@ -378,6 +379,45 @@ class VoiceSummary(BaseModel):
     voice_id: str | None = None
 
 
+class ProjectPageVideoAsset(BaseModel):
+    status: Literal["idle", "queued", "generating", "ready", "failed"] = "idle"
+    workflow_json_path: str | None = None
+    overlay_image_path: str | None = None
+    scene_data_path: str | None = None
+    audio_path: str | None = None
+    video_path: str | None = None
+    summary_path: str | None = None
+    error_message: str | None = None
+    updated_at: str | None = None
+
+
+class ProjectPageAsset(BaseModel):
+    page: int
+    width: float
+    height: float
+    image_path: str
+    video: ProjectPageVideoAsset | None = None
+
+
+class ProjectPageVideoResponse(BaseModel):
+    status: Literal["idle", "queued", "generating", "ready", "failed"]
+    overlay_image_url: str | None = None
+    thumbnail_url: str | None = None
+    scene_data_url: str | None = None
+    audio_url: str | None = None
+    video_url: str | None = None
+    error_message: str | None = None
+    updated_at: str | None = None
+
+
+class ProjectPageResponse(BaseModel):
+    page: int
+    width: float
+    height: float
+    image_url: str
+    video: ProjectPageVideoResponse | None = None
+
+
 class ProjectRecord(BaseModel):
     project_id: str
     created_at: str
@@ -389,6 +429,7 @@ class ProjectRecord(BaseModel):
     stage_label: str
     error_message: str | None = None
     warnings: list[str] = Field(default_factory=list)
+    pages: list[ProjectPageAsset] = Field(default_factory=list)
     analysis: AnalysisSummary | None = None
     voice: VoiceSummary | None = None
 
@@ -403,6 +444,7 @@ class ProjectResponse(BaseModel):
     stage_label: str
     error_message: str | None = None
     warnings: list[str] = Field(default_factory=list)
+    pages: list[ProjectPageResponse] = Field(default_factory=list)
     analysis: AnalysisSummary | None = None
     voice: VoiceSummary | None = None
 
@@ -420,6 +462,73 @@ class RenderVoiceRequest(BaseModel):
     pause_between_sections_s: float = Field(default=0.4, ge=0.0, le=5.0)
 
 
+class GeneratePageVideoRequest(BaseModel):
+    voice_id: str | None = None
+    use_mock_voice: bool = False
+    max_sections: int = Field(default=2, ge=1, le=8)
+    max_highlights: int = Field(default=4, ge=1, le=8)
+    max_candidates: int = Field(default=180, ge=20, le=500)
+    fps: int = Field(default=24, ge=12, le=60)
+
+
+def _page_image_url(project_id: str, page: int) -> str:
+    return f"/projects/{project_id}/pages/{page}/image"
+
+
+def _page_overlay_url(project_id: str, page: int) -> str:
+    return f"/projects/{project_id}/pages/{page}/overlay"
+
+
+def _page_video_url(project_id: str, page: int) -> str:
+    return f"/projects/{project_id}/pages/{page}/video"
+
+
+def _page_scene_data_url(project_id: str, page: int) -> str:
+    return f"/projects/{project_id}/pages/{page}/scene-data"
+
+
+def _page_audio_url(project_id: str, page: int) -> str:
+    return f"/projects/{project_id}/pages/{page}/audio"
+
+
+def _page_response(project_id: str, page: ProjectPageAsset) -> ProjectPageResponse:
+    video_response: ProjectPageVideoResponse | None = None
+    if page.video is not None:
+        overlay_image_url = (
+            _page_overlay_url(project_id, page.page)
+            if page.video.overlay_image_path
+            else None
+        )
+        video_url = (
+            _page_video_url(project_id, page.page) if page.video.video_path else None
+        )
+        audio_url = (
+            _page_audio_url(project_id, page.page) if page.video.audio_path else None
+        )
+        scene_data_url = (
+            _page_scene_data_url(project_id, page.page)
+            if page.video.scene_data_path
+            else None
+        )
+        video_response = ProjectPageVideoResponse(
+            status=page.video.status,
+            overlay_image_url=overlay_image_url,
+            thumbnail_url=overlay_image_url or _page_image_url(project_id, page.page),
+            scene_data_url=scene_data_url,
+            audio_url=audio_url,
+            video_url=video_url,
+            error_message=page.video.error_message,
+            updated_at=page.video.updated_at,
+        )
+    return ProjectPageResponse(
+        page=page.page,
+        width=page.width,
+        height=page.height,
+        image_url=_page_image_url(project_id, page.page),
+        video=video_response,
+    )
+
+
 def project_response(project: ProjectRecord) -> ProjectResponse:
     return ProjectResponse(
         project_id=project.project_id,
@@ -431,6 +540,7 @@ def project_response(project: ProjectRecord) -> ProjectResponse:
         stage_label=project.stage_label,
         error_message=project.error_message,
         warnings=project.warnings,
+        pages=[_page_response(project.project_id, page) for page in project.pages],
         analysis=project.analysis,
         voice=project.voice,
     )

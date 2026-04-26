@@ -5,15 +5,15 @@ import { useRouter } from "next/navigation";
 import { PaperazziLogo } from "@/components/PaperazziLogo";
 import { StepIndicator } from "@/components/StepIndicator";
 import { Sticker } from "@/components/Sticker";
-import { usePaperazziStore } from "@/lib/paperazzi-store";
+import { createProject } from "@/lib/paperazzi-api";
 import { toast } from "sonner";
 
 export default function UploadPage() {
   const router = useRouter();
-  const { setFile, setConcepts, setLoading, isLoading } = usePaperazziStore();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleFile = useCallback(
     async (file: File) => {
@@ -23,42 +23,18 @@ export default function UploadPage() {
       }
 
       setFileName(file.name);
-      setLoading(true);
-      setFile(file.name);
+      setIsLoading(true);
 
       try {
-        const formData = new FormData();
-        formData.append("file", file);
-
-        const response = await fetch("http://localhost:8000/concepts", {
-          method: "POST",
-          body: formData,
-        });
-
-        if (!response.ok) {
-          throw new Error("Failed to extract concepts");
-        }
-
-        const data = await response.json();
-
-        // Transform backend dict { "Title": "Summary" } to Concept[]
-        const concepts = Object.entries(data).map(([title, summary], index) => ({
-          id: `c${index}`,
-          title,
-          summary: summary as string,
-          section: "Core Concept",
-          confidence: 0.95 - index * 0.05,
-        }));
-
-        setConcepts(concepts);
-        router.push("/concepts");
+        const project = await createProject(file);
+        router.push(`/video?projectId=${project.project_id}`);
       } catch (error) {
         console.error("Upload error:", error);
-        toast.error("Failed to process PDF. Is the backend running?");
-        setLoading(false);
+        toast.error(error instanceof Error ? error.message : "Failed to process PDF.");
+        setIsLoading(false);
       }
     },
-    [router, setFile, setConcepts, setLoading],
+    [router],
   );
 
   return (
@@ -79,7 +55,7 @@ export default function UploadPage() {
       <header className="relative z-10 mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
         <PaperazziLogo />
         <span className="rounded-full border border-border bg-card/60 px-3 py-1 text-xs text-muted-foreground backdrop-blur">
-          Step 1 of 3
+          Upload PDF
         </span>
       </header>
 
@@ -105,7 +81,7 @@ export default function UploadPage() {
           <span className="shimmer-text">into bangers.</span>
         </h1>
         <p className="mt-5 max-w-lg text-center text-base text-muted-foreground md:text-lg">
-          Drop a research PDF. We&rsquo;ll yank out the spiciest claims and turn one into a video. 🍿
+          Drop a research PDF. We&rsquo;ll render page thumbnails first, then you pick a page and generate a focused explainer video.
         </p>
 
         <div
@@ -148,10 +124,10 @@ export default function UploadPage() {
             </svg>
           </div>
           <p className="mt-5 text-lg font-medium">
-            {isLoading ? "Reading paper…" : fileName ?? (dragOver ? "Yes! Drop it 🎯" : "Drop your PDF here")}
+            {isLoading ? "Preparing project…" : fileName ?? (dragOver ? "Yes! Drop it 🎯" : "Drop your PDF here")}
           </p>
           <p className="mt-2 text-sm text-muted-foreground">
-            {isLoading ? "Extracting the spicy bits" : "or click to browse — PDF up to 50 MB"}
+            {isLoading ? "Rendering page thumbnails and indexing the paper" : "or click to browse — PDF up to 50 MB"}
           </p>
 
           {isLoading && (

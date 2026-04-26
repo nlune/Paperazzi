@@ -212,7 +212,6 @@ def _draw_action_overlay(
         draw.rounded_rectangle(
             (x0, y0, x1, y1),
             radius=max(8, int(min(x1 - x0, y1 - y0) * 0.12)),
-            fill=(255, 214, 10, 0),
             outline=(255, 199, 0, state.highlight.border_alpha),
             width=max(2, int(max(image.size) * 0.0035)),
         )
@@ -276,7 +275,7 @@ def _draw_title_and_caption(
     width, height = image.size
     try:
         title_font = ImageFont.truetype("DejaVuSans-Bold.ttf", max(16, int(height * 0.018)))
-        caption_font = ImageFont.truetype("DejaVuSans.ttf", max(18, int(height * 0.02)))
+        caption_font = ImageFont.truetype("DejaVuSans.ttf", max(42, int(height * 0.06)))
     except OSError:
         title_font = ImageFont.load_default()
         caption_font = ImageFont.load_default()
@@ -288,12 +287,12 @@ def _draw_title_and_caption(
     clean_caption = " ".join(caption.split()).strip()
     if not clean_caption:
         return
-    wrapped = textwrap.fill(clean_caption, width=max(22, min(48, width // 28)))
-    lines = wrapped.splitlines()[:4]
+    wrapped = textwrap.fill(clean_caption, width=max(14, min(26, width // 52)))
+    lines = wrapped.splitlines()[:5]
     text = "\n".join(lines)
-    text_bbox = draw.multiline_textbbox((0, 0), text, font=caption_font, spacing=6)
-    box_width = min(width - 48, (text_bbox[2] - text_bbox[0]) + 40)
-    box_height = (text_bbox[3] - text_bbox[1]) + 32
+    text_bbox = draw.multiline_textbbox((0, 0), text, font=caption_font, spacing=12)
+    box_width = min(width - 48, (text_bbox[2] - text_bbox[0]) + 56)
+    box_height = (text_bbox[3] - text_bbox[1]) + 48
     x0 = 24
     y0 = height - box_height - 24
     draw.rounded_rectangle(
@@ -304,11 +303,11 @@ def _draw_title_and_caption(
         width=2,
     )
     draw.multiline_text(
-        (x0 + 20, y0 + 16),
+        (x0 + 28, y0 + 22),
         text,
         fill=(0, 0, 0, 255),
         font=caption_font,
-        spacing=6,
+        spacing=12,
     )
 
 
