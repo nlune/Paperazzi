@@ -29,9 +29,8 @@ Upload a PDF, select a page, and generate a narrated video that highlights key c
 - **Backend:** FastAPI services (project lifecycle, workflow generation, rendering)
 - **Storage:** Filesystem artifacts per project (`project.json`, workflow JSON, scene data, audio, video)
 
-<p align="center">
-  <img width="920" alt="Paperazzi preview" src="https://github.com/user-attachments/assets/a46d64d1-2d3c-4b47-8ce7-91a106368272" />
-</p>
+<img width="1440" height="1800" alt="image" src="https://github.com/user-attachments/assets/f628b8db-3276-4dc8-a7eb-19b062e1b37f" />
+
 
 ## Repo Structure
 
