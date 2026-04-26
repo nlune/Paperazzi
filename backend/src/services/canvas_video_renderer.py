@@ -273,16 +273,40 @@ def _draw_title_and_caption(
 ) -> None:
     draw = ImageDraw.Draw(image, "RGBA")
     width, height = image.size
-    try:
-        title_font = ImageFont.truetype("DejaVuSans-Bold.ttf", max(16, int(height * 0.018)))
-        caption_font = ImageFont.truetype("DejaVuSans.ttf", max(42, int(height * 0.1)))
-    except OSError:
-        title_font = ImageFont.load_default()
-        caption_font = ImageFont.load_default()
 
-    title_box = (24, 18, min(width - 24, width * 0.72), 52)
+    def _load_font(candidates: list[str], size: int):
+        for candidate in candidates:
+            try:
+                return ImageFont.truetype(candidate, size)
+            except OSError:
+                continue
+        return ImageFont.load_default()
+
+    title_font_size = max(20, int(height * 0.028))
+    caption_font_size = max(34, int(height * 0.048))
+    title_font = _load_font(
+        [
+            "DejaVuSans-Bold.ttf",
+            "Arial Bold.ttf",
+            "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+            "/System/Library/Fonts/Supplemental/Helvetica.ttc",
+        ],
+        title_font_size,
+    )
+    caption_font = _load_font(
+        [
+            "DejaVuSans.ttf",
+            "Arial.ttf",
+            "/System/Library/Fonts/Supplemental/Arial.ttf",
+            "/System/Library/Fonts/Supplemental/Helvetica.ttc",
+        ],
+        caption_font_size,
+    )
+
+    title_box_height = max(52, int(title_font_size * 1.5))
+    title_box = (24, 18, min(width - 24, width * 0.72), 18 + title_box_height)
     draw.rounded_rectangle(title_box, radius=14, fill=(15, 23, 42, 188))
-    draw.text((38, 28), title.strip()[:90], fill=(248, 250, 252, 255), font=title_font)
+    draw.text((38, 18 + int(title_font_size * 0.35)), title.strip()[:90], fill=(248, 250, 252, 255), font=title_font)
 
     clean_caption = " ".join(caption.split()).strip()
     if not clean_caption:
