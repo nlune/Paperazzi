@@ -3,6 +3,10 @@
 Paperazzi turns dense research papers into short, visual explainers.  
 Upload a PDF, select a page, and generate a narrated video that highlights key concepts with guided motion and callouts.
 
+## Demo
+
+▶️ [Demo video](https://youtu.be/feYS0lDS7lk)
+
 ## What It Does
 
 - Ingests a PDF and builds a project workspace.
